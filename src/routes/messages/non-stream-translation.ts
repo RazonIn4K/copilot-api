@@ -352,6 +352,20 @@ function getAnthropicToolUseBlocks(
     type: "tool_use",
     id: toolCall.id,
     name: toolCall.function.name,
-    input: JSON.parse(toolCall.function.arguments) as Record<string, unknown>,
+    input: safeParseToolInput(toolCall.function.arguments),
   }))
+}
+
+function safeParseToolInput(args: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(args)
+    if (parsed !== null && typeof parsed === "object") {
+      return parsed as Record<string, unknown>
+    }
+    return {}
+  } catch {
+    // Models occasionally emit malformed JSON for tool arguments.
+    // Return an empty input instead of crashing the whole response.
+    return {}
+  }
 }
