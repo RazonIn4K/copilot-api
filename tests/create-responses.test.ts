@@ -136,4 +136,41 @@ describe("Responses API adapter", () => {
       },
     })
   })
+
+  test("skips malformed stream events instead of throwing", () => {
+    const streamState: ResponsesStreamState = {
+      id: "resp_123",
+      model: "gpt-test",
+      created: 1700000000,
+      roleSent: true,
+    }
+
+    expect(responseEventToChatChunks("not json {", streamState)).toEqual([])
+    expect(responseEventToChatChunks("[DONE]", streamState)).toEqual([])
+    expect(responseEventToChatChunks("", streamState)).toEqual([])
+
+    // Stream state must be untouched so later valid events still work
+    const deltaChunks = responseEventToChatChunks(
+      JSON.stringify({ type: "response.output_text.delta", delta: "Hi" }),
+      streamState,
+    )
+    expect(deltaChunks).toHaveLength(1)
+  })
+
+  test("ignores unknown event types", () => {
+    const streamState: ResponsesStreamState = {
+      id: "resp_123",
+      model: "gpt-test",
+      created: 1700000000,
+      roleSent: false,
+    }
+
+    expect(
+      responseEventToChatChunks(
+        JSON.stringify({ type: "response.output_item.added" }),
+        streamState,
+      ),
+    ).toEqual([])
+    expect(streamState.roleSent).toBe(false)
+  })
 })

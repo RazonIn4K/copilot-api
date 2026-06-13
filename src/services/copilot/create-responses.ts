@@ -1,3 +1,4 @@
+import consola from "consola"
 import { events } from "fetch-event-stream"
 
 import { copilotBaseUrl, copilotHeaders } from "~/lib/api-config"
@@ -66,7 +67,15 @@ export function responseEventToChatChunks(
   eventData: string,
   state: ResponsesStreamState,
 ): Array<ChatCompletionChunk | "[DONE]"> {
-  const event = JSON.parse(eventData) as ResponseStreamEvent
+  let event: ResponseStreamEvent
+  try {
+    event = JSON.parse(eventData) as ResponseStreamEvent
+  } catch {
+    // Skip malformed or non-JSON SSE events (e.g. keepalives)
+    // instead of killing the whole stream.
+    consola.debug("Skipping non-JSON responses stream event:", eventData)
+    return []
+  }
 
   if (event.type === "response.created" && event.response) {
     state.id = event.response.id
@@ -185,6 +194,15 @@ interface ResponseStreamEvent {
 }
 
 function toResponsesPayload(payload: ChatCompletionsPayload): ResponsesPayload {
+  if (
+    (payload.tools && payload.tools.length > 0)
+    || payload.messages.some((m) => m.tool_calls && m.tool_calls.length > 0)
+  ) {
+    consola.warn(
+      "Tool definitions/calls are not supported via the /responses endpoint adapter and will be dropped for this model.",
+    )
+  }
+
   return {
     model: payload.model,
     input: payload.messages.flatMap((message) =>
